@@ -226,6 +226,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           },
           onStateChange: (event: { data: number }) => {
             const s = event.data;
+            if (s === 1) {
+              skipCountRef.current = 0;
+              patch({ error: null });
+            }
             patch({
               isPlaying: s === 1,
               isPaused: s === 2,
@@ -235,14 +239,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             if (s === 5) void syncPlaylist();
           },
           onError: () => {
-            patch({ error: FRIENDLY_ERROR });
-            try {
-              playerRef.current?.nextVideo();
-            } catch {
-              /* ignore */
-            }
+            skipToNextPlayable();
           },
         },
+
       });
     } catch {
       patch({ isBuffering: false, error: FRIENDLY_ERROR });
