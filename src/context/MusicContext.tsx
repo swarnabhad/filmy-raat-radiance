@@ -33,6 +33,10 @@ type YTPlayer = {
   getPlaylist(): string[] | null;
   getPlaylistIndex(): number;
   playVideoAt(index: number): void;
+  loadPlaylist(opts: { listType: string; list: string; index: number }): void;
+  getPlayerState(): number;
+
+
   getVideoData(): { video_id?: string; title?: string; author?: string };
   destroy(): void;
 };
@@ -119,6 +123,12 @@ function loadIframeApi(): Promise<void> {
 export function MusicProvider({ children }: { children: ReactNode }) {
   const playerRef = useRef<YTPlayer | null>(null);
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const skipCountRef = useRef(0);
+  const skipTimerRef = useRef<number | null>(null);
+  const watchdogRef = useRef<number | null>(null);
+  const skipRef = useRef<(() => void) | null>(null);
+
+
   const fetchPlaylistMeta = useServerFn(getPlaylistMeta);
   const fetchVideoMeta = useServerFn(getVideoMeta);
 
@@ -185,6 +195,93 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchPlaylistMeta, fetchVideoMeta, patch]);
 
+  /**
+   * Some songs are blocked from outside playback by their rights holders.
+   * When that happens, quietly reel forward to the next playable track.
+   */
+  const skipToNextPlayable = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const total = (() => {
+      try {
+        return player.getPlaylist()?.length ?? 0;
+      } catch {
+        return 0;
+      }
+    })();
+    skipCountRef.current += 1;
+    const maxAttempts = total > 0 ? total : 12;
+
+    if (skipCountRef.current >= maxAttempts) {
+      patch({
+        isPlaying: false,
+        isBuffering: false,
+        error: "The projector is stuck tonight — none of these reels will play here.",
+      });
+      return;
+    }
+
+    patch({
+      isBuffering: true,
+      error: "This song is blocked by its rights holder — reeling on to the next one…",
+    });
+
+    try {
+      let index = -1;
+      try {
+        index = player.getPlaylistIndex();
+      } catch {
+        /* ignore */
+      }
+      const raw = index >= 0 ? index + 1 : skipCountRef.current;
+      const next = total > 0 ? raw % total : raw;
+      if (skipTimerRef.current) window.clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = window.setTimeout(() => {
+        try {
+          if (total > 0) {
+            player.playVideoAt(next);
+          } else {
+            // The playlist never finished loading (the first reel was blocked
+            // before the player became ready) — reload it from the next song.
+            player.loadPlaylist({
+              listType: "playlist",
+              list: FILMI_RAAT_PLAYLIST_ID,
+              index: next,
+            });
+          }
+          player.playVideo();
+        } catch {
+          try {
+            player.nextVideo();
+          } catch {
+            /* ignore */
+          }
+        }
+
+        // Watchdog: a blocked track sometimes reports no further error, so
+        // check back and reel on again if nothing actually started playing.
+        if (watchdogRef.current) window.clearTimeout(watchdogRef.current);
+        watchdogRef.current = window.setTimeout(() => {
+          const p = playerRef.current;
+          if (!p) return;
+          try {
+            if (p.getPlayerState() !== 1) skipRef.current?.();
+          } catch {
+            /* ignore */
+          }
+        }, 6000);
+      }, 600);
+    } catch {
+      /* ignore */
+    }
+
+  }, [patch]);
+
+  skipRef.current = skipToNextPlayable;
+
+
+
+
   const enter = useCallback(async () => {
     if (state.isStarted) {
       playerRef.current?.playVideo();
@@ -226,6 +323,12 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           },
           onStateChange: (event: { data: number }) => {
             const s = event.data;
+            if (s === 1) {
+              skipCountRef.current = 0;
+              if (watchdogRef.current) window.clearTimeout(watchdogRef.current);
+              patch({ error: null });
+            }
+
             patch({
               isPlaying: s === 1,
               isPaused: s === 2,
@@ -235,14 +338,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             if (s === 5) void syncPlaylist();
           },
           onError: () => {
-            patch({ error: FRIENDLY_ERROR });
-            try {
-              playerRef.current?.nextVideo();
-            } catch {
-              /* ignore */
-            }
+            skipToNextPlayable();
           },
         },
+
       });
     } catch {
       patch({ isBuffering: false, error: FRIENDLY_ERROR });
