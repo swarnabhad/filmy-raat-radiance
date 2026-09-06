@@ -312,8 +312,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             const s = event.data;
             if (s === 1) {
               skipCountRef.current = 0;
+              if (watchdogRef.current) window.clearTimeout(watchdogRef.current);
               patch({ error: null });
             }
+
             patch({
               isPlaying: s === 1,
               isPaused: s === 2,
