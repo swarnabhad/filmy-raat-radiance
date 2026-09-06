@@ -119,6 +119,9 @@ function loadIframeApi(): Promise<void> {
 export function MusicProvider({ children }: { children: ReactNode }) {
   const playerRef = useRef<YTPlayer | null>(null);
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const skipCountRef = useRef(0);
+  const skipTimerRef = useRef<number | null>(null);
+
   const fetchPlaylistMeta = useServerFn(getPlaylistMeta);
   const fetchVideoMeta = useServerFn(getVideoMeta);
 
