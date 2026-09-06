@@ -185,6 +185,54 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchPlaylistMeta, fetchVideoMeta, patch]);
 
+  /**
+   * Some songs are blocked from outside playback by their rights holders.
+   * When that happens, quietly reel forward to the next playable track.
+   */
+  const skipToNextPlayable = useCallback(() => {
+    const player = playerRef.current;
+    if (!player) return;
+    const total = (() => {
+      try {
+        return player.getPlaylist()?.length ?? 0;
+      } catch {
+        return 0;
+      }
+    })();
+    skipCountRef.current += 1;
+
+    if (total > 0 && skipCountRef.current >= total) {
+      patch({
+        isPlaying: false,
+        isBuffering: false,
+        error: "The projector is stuck tonight — none of these reels will play here.",
+      });
+      return;
+    }
+
+    patch({
+      isBuffering: true,
+      error: "This song is blocked by its rights holder — reeling on to the next one…",
+    });
+
+    try {
+      const index = player.getPlaylistIndex();
+      const next = total > 0 ? (index + 1) % total : index + 1;
+      if (skipTimerRef.current) window.clearTimeout(skipTimerRef.current);
+      skipTimerRef.current = window.setTimeout(() => {
+        try {
+          player.playVideoAt(next);
+          player.playVideo();
+        } catch {
+          /* ignore */
+        }
+      }, 600);
+    } catch {
+      /* ignore */
+    }
+  }, [patch]);
+
+
   const enter = useCallback(async () => {
     if (state.isStarted) {
       playerRef.current?.playVideo();
