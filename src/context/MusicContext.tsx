@@ -264,6 +264,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   }, [patch]);
 
+  skipRef.current = skipToNextPlayable;
+
+
+
 
   const enter = useCallback(async () => {
     if (state.isStarted) {
