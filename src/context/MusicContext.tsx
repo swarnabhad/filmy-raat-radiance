@@ -311,7 +311,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           onReady: (event: { target: YTPlayer }) => {
             const player = event.target;
             playerRef.current = player;
-            (window as unknown as Record<string, unknown>)['__frPlayer'] = player;
             try {
               player.setVolume(state.volume);
               player.playVideo();
