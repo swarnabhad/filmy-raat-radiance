@@ -203,8 +203,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }
     })();
     skipCountRef.current += 1;
+    const maxAttempts = total > 0 ? total : 12;
 
-    if (total > 0 && skipCountRef.current >= total) {
+    if (skipCountRef.current >= maxAttempts) {
       patch({
         isPlaying: false,
         isBuffering: false,
@@ -219,20 +220,43 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     });
 
     try {
-      const index = player.getPlaylistIndex();
-      const next = total > 0 ? (index + 1) % total : index + 1;
+      let index = -1;
+      try {
+        index = player.getPlaylistIndex();
+      } catch {
+        /* ignore */
+      }
+      const raw = index >= 0 ? index + 1 : skipCountRef.current;
+      const next = total > 0 ? raw % total : raw;
       if (skipTimerRef.current) window.clearTimeout(skipTimerRef.current);
       skipTimerRef.current = window.setTimeout(() => {
         try {
           player.playVideoAt(next);
           player.playVideo();
         } catch {
-          /* ignore */
+          try {
+            player.nextVideo();
+          } catch {
+            /* ignore */
+          }
         }
+        // Watchdog: a blocked track sometimes reports no further error, so
+        // check back and reel on again if nothing actually started playing.
+        if (watchdogRef.current) window.clearTimeout(watchdogRef.current);
+        watchdogRef.current = window.setTimeout(() => {
+          const p = playerRef.current;
+          if (!p) return;
+          try {
+            if (p.getPlayerState() !== 1) skipRef.current?.();
+          } catch {
+            /* ignore */
+          }
+        }, 6000);
       }, 600);
     } catch {
       /* ignore */
     }
+
   }, [patch]);
 
 
