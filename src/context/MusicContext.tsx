@@ -236,7 +236,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       if (skipTimerRef.current) window.clearTimeout(skipTimerRef.current);
       skipTimerRef.current = window.setTimeout(() => {
         try {
-          player.playVideoAt(next);
+          if (total > 0) {
+            player.playVideoAt(next);
+          } else {
+            // The playlist never finished loading (the first reel was blocked
+            // before the player became ready) — reload it from the next song.
+            player.loadPlaylist({
+              listType: "playlist",
+              list: FILMI_RAAT_PLAYLIST_ID,
+              index: next,
+            });
+          }
           player.playVideo();
         } catch {
           try {
@@ -245,6 +255,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
             /* ignore */
           }
         }
+
         // Watchdog: a blocked track sometimes reports no further error, so
         // check back and reel on again if nothing actually started playing.
         if (watchdogRef.current) window.clearTimeout(watchdogRef.current);
