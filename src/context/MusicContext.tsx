@@ -33,6 +33,8 @@ type YTPlayer = {
   getPlaylist(): string[] | null;
   getPlaylistIndex(): number;
   playVideoAt(index: number): void;
+  getPlayerState(): number;
+
   getVideoData(): { video_id?: string; title?: string; author?: string };
   destroy(): void;
 };
