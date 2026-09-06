@@ -7,7 +7,7 @@ export type VideoMeta = {
   channelTitle: string;
   thumbnailUrl: string;
   playlistIndex: number;
-  duration?: number;
+  duration?: number | undefined;
 };
 
 export const FILMI_RAAT_PLAYLIST_ID = "PLLounUW9rgqGDmPxbZBerszf0dBq_M93b";
